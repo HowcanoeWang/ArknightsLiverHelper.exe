@@ -1,0 +1,1 @@
+cd C:\Users\Waston\Documents\Github\ArknightsLiverHelper.exe && pipenv run pyinstaller -w -F app.py

@@ -1,4 +1,4 @@
-# AkrnightsSimulatorHelper.exe
+﻿# AkrnightsSimulatorHelper.exe
 Arknights Simulator Helper | 基于python鼠标控制的明日方舟模拟器护肝助手
 
 ![](img/md_gui.png)
@@ -27,3 +27,7 @@ Arknights Simulator Helper | 基于python鼠标控制的明日方舟模拟器护
 需要在程序内部集成运行解释器，还需要另写一个脚本编辑器方便大家自己写脚本
 
 > 为什么不直接用sikulix? 因为想搞一个绿色的exe，不需要安装额外的依赖，减少使用难度
+
+## 打包
+Pyqt5 == 5.12.1保证打包成功
+> https://github.com/pyinstaller/pyinstaller/issues/4293
