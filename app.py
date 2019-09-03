@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+import os
 import sys
 import time
 import pyautogui as pag
@@ -12,6 +13,8 @@ class Helper(QWidget):
     dirty = True
     drag = False
     title = '明日方舟护肝助手V0.1'
+    simulator = {'Left': 0, 'Top': 0, 'Width': 1280, 'Height': 720}
+    script_list = []
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -23,8 +26,13 @@ class Helper(QWidget):
         self.setWindowIcon(QIcon('img/images.jpg'))
         self.setMouseTracking(True)
 
+        self.mouseTimer = QTimer(self)
+        self.mouseTimer.start(200)
+
         self.setupUI()
         self.functionConnector()
+
+        self.loadScript()
 
     ##############
     # GUI Design #
@@ -95,7 +103,6 @@ class Helper(QWidget):
         self.scriptChoiceLayout = QVBoxLayout()
         self.scriptChoice = QComboBox()
         # Todo: Load Configure to items
-        self.scriptChoice.addItems(['OF_7', 'OF_F4'])
         self.scriptChoice.setFixedHeight(int(self.screen_ref*0.02))
 
         self.scriptChoiceLayout.addWidget(QLabel('选择辅助脚本：'))
@@ -132,7 +139,9 @@ class Helper(QWidget):
     def functionConnector(self):
         self.minButton.clicked.connect(self.showMininizedWindow)
         self.closeButton.clicked.connect(self.closeWindow)
+        self.mouseTimer.timeout.connect(self.updateMouseRelativePos)
         self.scriptChoice.currentIndexChanged.connect(self.scriptChanges)
+        self.startButton.clicked.connect(self.runScript)
 
     def showMininizedWindow(self):
         self.setWindowState(Qt.WindowMinimized)
@@ -160,6 +169,11 @@ class Helper(QWidget):
 
         self.frameHtLabel.setText(f'高[{trans_height}]像素')
         self.frameWdLabel.setText(f'宽[{trans_width}]像素')
+
+        self.simulator['Height'] = trans_height
+        self.simulator['Width'] = trans_width
+        self.simulator['Left'] = frameRect.left() + 1
+        self.simulator['Top'] = frameRect.top() + title_height
 
     def resizeEvent(self, event):
         super(Helper, self).resizeEvent(event)
@@ -195,12 +209,45 @@ class Helper(QWidget):
             delta = QPoint(event.globalPos() - self.oldPos)
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self.oldPos = event.globalPos()
+            self.updateMask()
 
     def mouseReleaseEvent(self, event):
         self.drag = False
 
+    ##################
+    #  Script Loader #
+    ##################
+    def loadScript(self):
+        if not os.path.exists('Scripts/'):
+            os.mkdir('Scripts')
+        files = os.listdir('Scripts/')
+        for f in files:
+            if '.ark' in f:
+                if 'run.ash' in os.listdir(f'Scripts/{f}/'):
+                    self.script_list.append(f[:-4])
+
+        if len(self.script_list) > 0:
+            self.scriptChoice.addItems(self.script_list)
+            self.startButton.setEnabled(True)
+        else:
+            QMessageBox.about(self, '警告', '未发现脚本，请将脚本文件复制到创建的Scripts文件夹内')
+            self.startButton.setEnabled(False)
+
     def scriptChanges(self):
         print(self.scriptChoice.currentText())
+
+    def runScript(self):
+        script_name = self.scriptChoice.currentText()
+        times = self.loopTime.value()
+        current_dir = f'Scripts/{script_name}.ark/'
+        script = ''
+        with open(current_dir+'run.ash') as f:
+            for row in f.readlines():
+                script += row
+        if times > 0:
+            for i in range(times):
+                print(script)   # todo change to eval after finish
+                self.loopTime.setValue(times - i - 1)
 
     #####################
     #  Mouse Controller #
@@ -208,9 +255,40 @@ class Helper(QWidget):
     def updateMouseRelativePos(self):
         # need to add asyn here
         x, y = pag.position()
-        time.sleep(0.2)
+        rel_x, rel_y = self.abslute2relative(x, y)
+        self.mouseRefPos.setText(f"({format(rel_x,'.3f')}, {format(rel_y, '.3f')})")
+
+    def abslute2relative(self, x, y):
+        rel_x = (x - self.simulator['Left']) / self.simulator['Width']
+        rel_y = (y - self.simulator['Top']) / self.simulator['Height']
+        return rel_x, rel_y
+
+    def relative2abslute(self, rel_x, rel_y):
+        x = rel_x * self.simulator['Width'] + self.simulator['Left']
+        y = rel_y * self.simulator['Height'] + self.simulator['Top']
+        return x, y
+
+    def getScreenShot(self):
+        pass
+
+    def getImgRelativePos(self, img_dir):
+        pass
 
 
+    #######################
+    #  Script Interpreter #
+    #######################
+    def click(self, img_dir, sleep_time=2):
+        # check whether exist, not -> wait
+        print(f'clicked {img_dir}')
+
+    def click_pos(self, x, y, sleep_time=2):
+        # this can operate directly
+        print(f'clicked {x}, {y}')
+
+    def img_exist(self, img_dir):
+        print(img_dir)
+        return True
 
 class VLine(QFrame):
     # a simple VLine, like the one you get from designer
