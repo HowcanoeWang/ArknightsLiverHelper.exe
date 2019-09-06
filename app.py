@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import pyautogui as pag
+from datetime import datetime
 from random import randrange
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -15,12 +16,13 @@ class Helper(QWidget):
     title = '明日方舟护肝助手V0.1'
     simulator = {'Left': 0, 'Top': 0, 'Width': 1280, 'Height': 720}
     script_list = []
+    run_times = 0
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.screen_ref = min(screen_height, screen_width)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint)
-        self.resize(1280, 720)
+        self.resize(1600+2, 900+126)
         self.setContentsMargins(0, 0, 0, 0)
         self.setWindowTitle(self.title)
         self.setWindowIcon(QIcon('img/images.jpg'))
@@ -28,11 +30,12 @@ class Helper(QWidget):
 
         self.mouseTimer = QTimer(self)
         self.mouseTimer.start(200)
+        self.runner = Runner(self)
 
         self.setupUI()
         self.functionConnector()
 
-        self.loadScript()
+        self.loadScriptList()
 
     ##############
     # GUI Design #
@@ -95,14 +98,13 @@ class Helper(QWidget):
         self.simulatorWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.mainlayout.addWidget(self.simulatorWidget)
 
+
         # ======== set bottom tools ===========
         self.toolLayout = QHBoxLayout()
-        #self.toolLayout.setContentsMargins(5, 5, 5, 5)
 
         # Script Choice
         self.scriptChoiceLayout = QVBoxLayout()
         self.scriptChoice = QComboBox()
-        # Todo: Load Configure to items
         self.scriptChoice.setFixedHeight(int(self.screen_ref*0.02))
 
         self.scriptChoiceLayout.addWidget(QLabel('选择辅助脚本：'))
@@ -136,12 +138,14 @@ class Helper(QWidget):
 
         self.mainlayout.addLayout(self.toolLayout)
 
+
     def functionConnector(self):
         self.minButton.clicked.connect(self.showMininizedWindow)
         self.closeButton.clicked.connect(self.closeWindow)
         self.mouseTimer.timeout.connect(self.updateMouseRelativePos)
         self.scriptChoice.currentIndexChanged.connect(self.scriptChanges)
         self.startButton.clicked.connect(self.runScript)
+        self.runner.sigOut.connect(self.finish_once)
 
     def showMininizedWindow(self):
         self.setWindowState(Qt.WindowMinimized)
@@ -214,10 +218,26 @@ class Helper(QWidget):
     def mouseReleaseEvent(self, event):
         self.drag = False
 
+    def updateMouseRelativePos(self):
+        # need to add asyn here
+        x, y = pag.position()
+        rel_x, rel_y = self.abslute2relative(x, y)
+        self.mouseRefPos.setText(f"({format(rel_x, '.3f')}, {format(rel_y, '.3f')})")
+
+    def abslute2relative(self, x, y):
+        rel_x = (x - self.simulator['Left']) / self.simulator['Width']
+        rel_y = (y - self.simulator['Top']) / self.simulator['Height']
+        return rel_x, rel_y
+
+    def relative2abslute(self, rel_x, rel_y):
+        x = rel_x * self.simulator['Width'] + self.simulator['Left']
+        y = rel_y * self.simulator['Height'] + self.simulator['Top']
+        return x, y
+
     ##################
     #  Script Loader #
     ##################
-    def loadScript(self):
+    def loadScriptList(self):
         if not os.path.exists('Scripts/'):
             os.mkdir('Scripts')
         files = os.listdir('Scripts/')
@@ -237,58 +257,40 @@ class Helper(QWidget):
         print(self.scriptChoice.currentText())
 
     def runScript(self):
-        script_name = self.scriptChoice.currentText()
-        times = self.loopTime.value()
-        current_dir = f'Scripts/{script_name}.ark/'
-        script = ''
-        with open(current_dir+'run.ash') as f:
-            for row in f.readlines():
-                script += row
-        if times > 0:
-            for i in range(times):
-                print(script)   # todo change to eval after finish
-                self.loopTime.setValue(times - i - 1)
+        if self.startButton.text() == '开始':
+            self.run_times = self.loopTime.value()
+            if self.run_times > 0:
+                self.script_name = self.scriptChoice.currentText()
+                self.current_dir = f'Scripts/{self.script_name}.ark/'
+                script = ''
+                with open(self.current_dir + 'run.ash') as f:
+                    for row in f.readlines():
+                        row = row.replace('click(', 'self.click(')
+                        row = row.replace('set_skip_img(', 'self.set_skip_img(')
+                        script += row
+                # print(script)
+                self.runner.set_params(script, current_dir=self.current_dir, simulator=self.simulator)
+                self.runner.start()
+                self.startButton.setText('结束')
+                self.sizegrip.setEnabled(False)
+            else:
+                print('[Warning]: 执行次数请>1!')
+        else:
+            self.runner.terminate()
+            self.runner.wait()
+            self.startButton.setText('开始')
+            self.sizegrip.setEnabled(True)
+            self.loopTime.setValue(0)
 
-    #####################
-    #  Mouse Controller #
-    #####################
-    def updateMouseRelativePos(self):
-        # need to add asyn here
-        x, y = pag.position()
-        rel_x, rel_y = self.abslute2relative(x, y)
-        self.mouseRefPos.setText(f"({format(rel_x,'.3f')}, {format(rel_y, '.3f')})")
+    def finish_once(self):
+        self.run_times -= 1
+        print(f'[ Info {datetime.now().strftime("%H:%M:%S")}] 剩余{self.run_times}次')
+        self.loopTime.setValue(self.run_times)
+        if self.run_times > 0:
+            self.runner.start()
+        else:
+            print(f'[ Info {datetime.now().strftime("%H:%M:%S")}] “{self.script_name}” 执行完毕')
 
-    def abslute2relative(self, x, y):
-        rel_x = (x - self.simulator['Left']) / self.simulator['Width']
-        rel_y = (y - self.simulator['Top']) / self.simulator['Height']
-        return rel_x, rel_y
-
-    def relative2abslute(self, rel_x, rel_y):
-        x = rel_x * self.simulator['Width'] + self.simulator['Left']
-        y = rel_y * self.simulator['Height'] + self.simulator['Top']
-        return x, y
-
-    def getScreenShot(self):
-        pass
-
-    def getImgRelativePos(self, img_dir):
-        pass
-
-
-    #######################
-    #  Script Interpreter #
-    #######################
-    def click(self, img_dir, sleep_time=2):
-        # check whether exist, not -> wait
-        print(f'clicked {img_dir}')
-
-    def click_pos(self, x, y, sleep_time=2):
-        # this can operate directly
-        print(f'clicked {x}, {y}')
-
-    def img_exist(self, img_dir):
-        print(img_dir)
-        return True
 
 class VLine(QFrame):
     # a simple VLine, like the one you get from designer
@@ -296,6 +298,121 @@ class VLine(QFrame):
         super(VLine, self).__init__()
         self.setFrameShape(self.VLine | self.Sunken)
         self.setLineWidth(3)
+
+class Runner(QThread):
+    sigOut = pyqtSignal(object)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.run_code = ''
+        self.current_dir = ''
+        self.simulator = {}
+        self.skip_img_list = []
+        self.stop_img_list = []
+
+    def set_params(self, code, current_dir, simulator):
+        self.run_code = code
+        self.current_dir = current_dir
+        self.simulator = simulator
+
+    def run(self):
+        exec(self.run_code)
+        self.sigOut.emit(True)
+
+    #####################
+    #  Mouse Controller #
+    #####################
+    def _getImgAbsPos(self, img_name, confidence=0.90):
+        img_list = img_name.split(' | ')
+        click_pos = None
+        for img in img_list:
+            try:
+                absLocation = pag.locateOnScreen(self.current_dir + 'img/' + img,
+                                                 region=(self.simulator['Left'], self.simulator['Top'],
+                                                         self.simulator['Width'], self.simulator['Height']),
+                                                 confidence=confidence)
+            except ValueError:
+                absLocation = None
+                print('[Warning]: 当前窗口大小比img中图片要小，请设置正确的分辨率！')
+
+            if absLocation is not None:
+                w = absLocation.width
+                h = absLocation.height
+                absCenter = pag.center(absLocation)
+                center_x = absCenter.x
+                center_y = absCenter.y
+                click_x = randrange(int(center_x - 0.3 * w), int(center_x + 0.3 * w), 1)
+                click_y = randrange(int(center_y - 0.3 * h), int(center_y + 0.3 * h), 1)
+                click_pos = (click_x, click_y)
+                return click_pos
+
+        return click_pos
+
+    def click(self, img_name, frequency=2):
+        # check whether exist, not -> wait until exist
+        # if exist, click, mark as found.
+        # check if exist, still exist -> reclick, not exist -> next click command
+        loop = True
+        found = False
+        while loop:
+            self._check_stop_img()
+            self._check_skip_img()
+            abspos = self._getImgAbsPos(img_name)
+            if abspos is None and not found:
+                # check whether exist, not -> keep checking until exist
+                print(
+                    f'{datetime.now().strftime("%H:%M:%S")}[Warning] Picture "{img_name}" not found, wait for {frequency}s',
+                    end='\r')
+                time.sleep(frequency)
+
+            if abspos is not None and not found:
+                # the first time to find a position
+                found = True
+                print(
+                    f'{datetime.now().strftime("%H:%M:%S")}[ info ] Picture "{img_name}" position {abspos} found, trying to click')
+                pag.moveTo(*abspos, duration=0.5)
+                pag.click()
+
+            if abspos is not None and found:
+                # still find the image after clicking -> click fail -> reclick
+                print(f'{datetime.now().strftime("%H:%M:%S")}[Warning] Click "{img_name}" fail, trying to reclick',
+                      end='\r')
+                pag.click()
+
+            if abspos is None and found:
+                loop = False
+
+    def click_pos(self, x, y, sleep_time=2):
+        # this can operate directly
+        pag.click(helper.relative2abslute(x, y))
+
+    def img_exist(self, img_name):
+        abspos = self._getImgAbsPos(img_name)
+        if abspos is not None:
+            return True
+        else:
+            return False
+
+    def set_skip_img(self, img_name):
+        self.skip_img_list = img_name.split(' | ')
+
+    def set_stop_img(self, img_name):
+        self.stop_img_list = img_name.split(' | ')
+
+    def _check_skip_img(self):
+        for skip in self.skip_img_list:
+            if self.img_exist(skip):
+                self.click_pos(0.5, 0.5)
+                print(f'{datetime.now().strftime("%H:%M:%S")}[ Info] Skip "{skip}" ')
+
+    def _check_stop_img(self):
+        for stop in self.stop_img_list:
+            if self.img_exist(stop):
+                # do something here
+                helper.loopTime.setValue(0)
+                print(f'{datetime.now().strftime("%H:%M:%S")}[ Info] Catch stop image "{stop}", stop running')
+                self.terminate()
+                self.wait()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
