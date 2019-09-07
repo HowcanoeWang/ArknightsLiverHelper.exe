@@ -2,13 +2,13 @@
 import os
 import sys
 import time
+import traceback
 import pyautogui as pag
 from datetime import datetime
 from random import randrange
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
-
 
 class Helper(QWidget):
     dirty = True
@@ -17,15 +17,16 @@ class Helper(QWidget):
     simulator = {'Left': 0, 'Top': 0, 'Width': 1280, 'Height': 720}
     script_list = []
     run_times = 0
+    logs = ['']
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.screen_ref = min(screen_height, screen_width)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint)
-        self.resize(1600+2, 900+126)
+        self.resize(1600+2, 900+145)
         self.setContentsMargins(0, 0, 0, 0)
         self.setWindowTitle(self.title)
-        self.setWindowIcon(QIcon('img/images.jpg'))
+        self.setWindowIcon(QIcon('icon/images.jpg'))
         self.setMouseTracking(True)
 
         self.mouseTimer = QTimer(self)
@@ -57,13 +58,13 @@ class Helper(QWidget):
         self.iconLabel.setAlignment(Qt.AlignLeft)
         self.titleLabel.setAlignment(Qt.AlignCenter)
 
-        self.iconLabel.setPixmap(QPixmap("img/images.jpg").scaled(self.screen_ref*0.03, self.screen_ref*0.03))
+        self.iconLabel.setPixmap(QPixmap("icon/images.jpg").scaled(self.screen_ref*0.03, self.screen_ref*0.03))
         self.titleLabel.setText(self.title)
         self.titleLabel.setFont(QFont('Microsoft YaHei UI', 15))
-        self.minButton.setIcon(QIcon("img/minimize.png"))
+        self.minButton.setIcon(QIcon("icon/minimize.png"))
         self.minButton.setIconSize(QSize(self.screen_ref*0.03, self.screen_ref*0.03))
         self.minButton.setStyleSheet("QPushButton{border:none};")
-        self.closeButton.setIcon(QIcon("img/cancel.png"))
+        self.closeButton.setIcon(QIcon("icon/cancel.png"))
         self.closeButton.setIconSize(QSize(self.screen_ref * 0.03, self.screen_ref * 0.03))
         self.closeButton.setStyleSheet("QPushButton{border:none};")
 
@@ -118,7 +119,7 @@ class Helper(QWidget):
         self.loopTime = QSpinBox()
         self.loopTime.setRange(0, 30)
         self.loopTime.setValue(0)
-        self.loopTime.setFixedHeight(int(self.screen_ref * 0.02))
+        self.loopTime.setFixedHeight(int(self.screen_ref * 0.03))
 
         self.loopTimeLayout.addWidget(QLabel('执行次数：'))
         self.loopTimeLayout.addWidget(self.loopTime)
@@ -127,10 +128,15 @@ class Helper(QWidget):
 
         # Start Btn
         self.startButton = QPushButton('开始')
-        self.startButton.setFixedHeight(int(self.screen_ref*0.04))
+        self.startButton.setFixedHeight(int(self.screen_ref*0.05))
 
         self.toolLayout.addWidget(self.startButton)
 
+        self.logText = QTextEdit()
+        self.logText.setFixedHeight(self.screen_ref*0.05)
+        self.logText.setFixedWidth(self.screen_ref*0.4)
+
+        self.toolLayout.addWidget(self.logText)
         self.toolLayout.addStretch()
 
         self.sizegrip = QSizeGrip(self)
@@ -146,6 +152,7 @@ class Helper(QWidget):
         self.scriptChoice.currentIndexChanged.connect(self.scriptChanges)
         self.startButton.clicked.connect(self.runScript)
         self.runner.sigOut.connect(self.finish_once)
+        self.runner.logOut.connect(self.printf)
 
     def showMininizedWindow(self):
         self.setWindowState(Qt.WindowMinimized)
@@ -234,6 +241,31 @@ class Helper(QWidget):
         y = rel_y * self.simulator['Height'] + self.simulator['Top']
         return x, y
 
+    def printf(self, text, mode='append'):
+        # mode == clear: empty all
+        # mode == last: replace the last line
+        # mode == append: add a new line
+        if mode == 'clear':
+            self.logs = [text]
+        elif mode == 'last':
+            self.logs[-1] = text
+        elif mode == 'append':
+            self.logs.append(text)
+
+        self.logText.setHtml(self.list2html(self.logs))
+        vsb = self.logText.verticalScrollBar()
+        vsb.setValue(vsb.maximum())
+
+    @staticmethod
+    def list2html(ls):
+        html = '<p>'
+        for line in ls:
+            line = line.replace('[', '<font color="red">[')
+            line = line.replace(']', ']</font>')
+            html += f"{line}<br />"
+        html = html[:-6] + '</p>'
+        return html
+
     ##################
     #  Script Loader #
     ##################
@@ -254,7 +286,7 @@ class Helper(QWidget):
             self.startButton.setEnabled(False)
 
     def scriptChanges(self):
-        print(self.scriptChoice.currentText())
+        self.printf(f'=========载入脚本{self.scriptChoice.currentText()}=======', 'clear')
 
     def runScript(self):
         if self.startButton.text() == '开始':
@@ -274,22 +306,24 @@ class Helper(QWidget):
                 self.startButton.setText('结束')
                 self.sizegrip.setEnabled(False)
             else:
-                print('[Warning]: 执行次数请>1!')
+                QMessageBox.about(self, '警告', '执行次数请>1!')
         else:
             self.runner.terminate()
             self.runner.wait()
             self.startButton.setText('开始')
             self.sizegrip.setEnabled(True)
             self.loopTime.setValue(0)
+            self.printf('[信息]=========手动结束==========')
 
     def finish_once(self):
         self.run_times -= 1
-        print(f'[ Info {datetime.now().strftime("%H:%M:%S")}] 剩余{self.run_times}次')
+        self.printf(f'{datetime.now().strftime("%H:%M:%S")}[行动] ==========剩余{self.run_times}次==========')
         self.loopTime.setValue(self.run_times)
         if self.run_times > 0:
             self.runner.start()
         else:
-            print(f'[ Info {datetime.now().strftime("%H:%M:%S")}] “{self.script_name}” 执行完毕')
+            self.printf(f'[信息]=========== {self.script_name} 执行完毕============')
+            self.startButton.setText('开始')
 
 
 class VLine(QFrame):
@@ -301,6 +335,7 @@ class VLine(QFrame):
 
 class Runner(QThread):
     sigOut = pyqtSignal(object)
+    logOut = pyqtSignal(object, object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -333,7 +368,7 @@ class Runner(QThread):
                                                  confidence=confidence)
             except ValueError:
                 absLocation = None
-                print('[Warning]: 当前窗口大小比img中图片要小，请设置正确的分辨率！')
+                QMessageBox.about(self, '警告', '当前窗口大小比img中图片要小，请设置正确的分辨率！')
 
             if absLocation is not None:
                 w = absLocation.width
@@ -354,35 +389,51 @@ class Runner(QThread):
         # check if exist, still exist -> reclick, not exist -> next click command
         loop = True
         found = False
+        wait_count = 0
+        click_count = 0
+        self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]寻找图片{img_name.replace(" | ", "或")}',
+                    mode='last')
         while loop:
             self._check_stop_img()
             self._check_skip_img()
             abspos = self._getImgAbsPos(img_name)
             if abspos is None and not found:
                 # check whether exist, not -> keep checking until exist
-                print(
-                    f'{datetime.now().strftime("%H:%M:%S")}[Warning] Picture "{img_name}" not found, wait for {frequency}s',
-                    end='\r')
+                if wait == 0:
+                    self.printf(
+                        f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到，等待{frequency}秒')
+                else:
+                    self.printf(
+                        f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到({wait_count}次)，等待{frequency}秒',
+                        mode='last')
+                wait_count += 1
                 time.sleep(frequency)
+                continue
 
             if abspos is not None and not found:
                 # the first time to find a position
                 found = True
-                print(
-                    f'{datetime.now().strftime("%H:%M:%S")}[ info ] Picture "{img_name}" position {abspos} found, trying to click')
+                self.printf(
+                    f'{datetime.now().strftime("%H:%M:%S")}[行动]图片{img_name}位置{abspos}')
                 pag.moveTo(*abspos, duration=0.5)
-                pag.click()
+                continue
 
             if abspos is not None and found:
                 # still find the image after clicking -> click fail -> reclick
-                print(f'{datetime.now().strftime("%H:%M:%S")}[Warning] Click "{img_name}" fail, trying to reclick',
-                      end='\r')
+                if click_count == 0:
+                    self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]尝试点击')
+                else:
+                    self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]点击失败({click_count}次)，重试')
+                click_count += 1
                 pag.click()
+                time.sleep(1.5)
+                continue
 
             if abspos is None and found:
+                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}点击成功')
                 loop = False
 
-    def click_pos(self, x, y, sleep_time=2):
+    def click_pos(self, x, y, sleep_time=0):
         # this can operate directly
         pag.click(helper.relative2abslute(x, y))
 
@@ -403,16 +454,62 @@ class Runner(QThread):
         for skip in self.skip_img_list:
             if self.img_exist(skip):
                 self.click_pos(0.5, 0.5)
-                print(f'{datetime.now().strftime("%H:%M:%S")}[ Info] Skip "{skip}" ')
+                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]跳过{skip}')
 
     def _check_stop_img(self):
         for stop in self.stop_img_list:
             if self.img_exist(stop):
                 # do something here
                 helper.loopTime.setValue(0)
-                print(f'{datetime.now().strftime("%H:%M:%S")}[ Info] Catch stop image "{stop}", stop running')
+                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]检测到停止点{stop}停止运行')
                 self.terminate()
                 self.wait()
+                
+    def printf(self, text, mode='append'):
+        self.logOut.emit(text, mode)
+
+class UncaughtHook(QObject):
+    _exception_caught = pyqtSignal(object)
+
+    def __init__(self, *args, **kwargs):
+        super(UncaughtHook, self).__init__(*args, **kwargs)
+
+        # this registers the exception_hook() function as hook with the Python interpreter
+        sys.excepthook = self.exception_hook
+
+        # connect signal to execute the message box function always on main thread
+        self._exception_caught.connect(self.show_exception_box)
+
+    def exception_hook(self, exc_type, exc_value, exc_traceback):
+        """Function handling uncaught exceptions.
+        It is triggered each time an uncaught exception occurs.
+        """
+        if issubclass(exc_type, KeyboardInterrupt):
+            # ignore keyboard interrupt to support console applications
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        else:
+            exc_info = (exc_type, exc_value, exc_traceback)
+            log_msg = '\n'.join([''.join(traceback.format_tb(exc_traceback)),
+                                 '{0}: {1}'.format(exc_type.__name__, exc_value)])
+            #log.critical("Uncaught exception:\n {0}".format(log_msg), exc_info=exc_info)
+
+            # trigger message box show
+            self._exception_caught.emit(log_msg)
+
+    @staticmethod
+    def show_exception_box(log_msg):
+        """Checks if a QApplication instance is available and shows a messagebox with the exception message.
+        If unavailable (non-console application), log an additional notice.
+        """
+        if QApplication.instance() is not None:
+            errorbox = QMessageBox()
+            errorbox.setText("啊偶，脑机接口链接失败了:\n{0}".format(log_msg))
+            errorbox.setWindowFlags(Qt.WindowStaysOnTopHint)
+            errorbox.exec_()
+            sys.exit()
+        else:
+            # log.debug("No QApplication instance available.")
+            pass
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
@@ -420,4 +517,6 @@ if __name__ == '__main__':
     screen_width = app.primaryScreen().size().width()
     helper = Helper()
     helper.show()
+    # create a global instance of our class to register the hook
+    qt_exception_hook = UncaughtHook()
     sys.exit(app.exec_())

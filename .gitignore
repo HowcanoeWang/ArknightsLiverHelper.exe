@@ -6,3 +6,4 @@ Scripts/test.ark/*
 build/*
 dist/*
 distribute/*
+__pycache__/*
