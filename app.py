@@ -399,7 +399,7 @@ class Runner(QThread):
             abspos = self._getImgAbsPos(img_name)
             if abspos is None and not found:
                 # check whether exist, not -> keep checking until exist
-                if wait == 0:
+                if wait_count == 0:
                     self.printf(
                         f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到，等待{frequency}秒')
                 else:
