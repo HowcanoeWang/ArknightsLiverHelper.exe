@@ -1,7 +1,6 @@
 test/*
 .idea/*
 Scripts/repeat.ark/test/*
-Scripts/daily.ark/*
 Scripts/test.ark/*
 build/*
 dist/*

@@ -4,7 +4,7 @@ block_cipher = None
 
 
 a = Analysis(['app.py'],
-             pathex=['C:\\Users\\Waston\\Documents\\GitHub\\ArknightsLiverHelper.exe'],
+             pathex=['C:\\OneDrive\\Program\\GitHub\\ArknightsLiverHelper.exe'],
              binaries=[],
              datas=[],
              hiddenimports=[],
@@ -30,3 +30,4 @@ exe = EXE(pyz,
           upx=True,
           upx_exclude=[],
           runtime_tmpdir=None,
+          console=False )

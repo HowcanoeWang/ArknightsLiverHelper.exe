@@ -153,6 +153,7 @@ class Helper(QWidget):
         self.startButton.clicked.connect(self.runScript)
         self.runner.sigOut.connect(self.finish_once)
         self.runner.logOut.connect(self.printf)
+        self.runner.stopOut.connect(self.stopScript)
 
     def showMininizedWindow(self):
         self.setWindowState(Qt.WindowMinimized)
@@ -294,26 +295,22 @@ class Helper(QWidget):
             if self.run_times > 0:
                 self.script_name = self.scriptChoice.currentText()
                 self.current_dir = f'Scripts/{self.script_name}.ark/'
-                script = ''
-                with open(self.current_dir + 'run.ash') as f:
-                    for row in f.readlines():
-                        row = row.replace('click(', 'self.click(')
-                        row = row.replace('set_skip_img(', 'self.set_skip_img(')
-                        script += row
-                # print(script)
-                self.runner.set_params(script, current_dir=self.current_dir, simulator=self.simulator)
+                self.runner.set_params(current_dir=self.current_dir, simulator=self.simulator)
                 self.runner.start()
                 self.startButton.setText('结束')
                 self.sizegrip.setEnabled(False)
             else:
                 QMessageBox.about(self, '警告', '执行次数请>1!')
         else:
-            self.runner.terminate()
-            self.runner.wait()
-            self.startButton.setText('开始')
-            self.sizegrip.setEnabled(True)
-            self.loopTime.setValue(0)
+            self.stopScript()
             self.printf('[信息]=========手动结束==========')
+
+    def stopScript(self):
+        self.runner.terminate()
+        self.runner.wait()
+        self.startButton.setText('开始')
+        self.sizegrip.setEnabled(True)
+        self.loopTime.setValue(0)
 
     def finish_once(self):
         self.run_times -= 1
@@ -336,6 +333,7 @@ class VLine(QFrame):
 class Runner(QThread):
     sigOut = pyqtSignal(object)
     logOut = pyqtSignal(object, object)
+    stopOut = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -345,18 +343,105 @@ class Runner(QThread):
         self.skip_img_list = []
         self.stop_img_list = []
 
-    def set_params(self, code, current_dir, simulator):
-        self.run_code = code
+    def set_params(self, current_dir, simulator):
         self.current_dir = current_dir
         self.simulator = simulator
 
+        script = ''
+        with open(self.current_dir + 'run.ash') as f:
+            for row in f.readlines():
+                row = row.replace('click(', 'self.click(')
+                row = row.replace('set_skip_img(', 'self.set_skip_img(')
+                row = row.replace('set_stop_img(', 'self.set_stop_img(')
+                row = row.replace('click_if_exist(', 'self.click_if_exist(')
+                script += row
+
+        self.run_code = script
+        self.skip_img_list = []
+        self.stop_img_list = []
+
     def run(self):
+        self.skip_img_list = []
+        self.stop_img_list = []
         exec(self.run_code)
         self.sigOut.emit(True)
 
     #####################
     #  Mouse Controller #
     #####################
+    def set_skip_img(self, img_name, click_pos=(0.5, 0.5)):
+        # click_pos is tuple (x, y) -> click pos
+        # click_pos is img_name -> click img
+        for img in img_name.split(' | '):
+            self.skip_img_list.append((img, click_pos))
+
+    def set_stop_img(self, img_name, click_pos=(0.5, 0.5)):
+        for img in img_name.split(' | '):
+            self.stop_img_list.append((img, click_pos))
+
+    def click(self, img_name, frequency=2):
+        loop = True
+        found = 0
+        while loop:
+            # check whether stop img exist
+            stop_flag = self._check_stop_img()
+            if stop_flag != -1:   # find stop images
+                stop_name, position = self.stop_img_list[stop_flag]  # next click
+                if isinstance(position, tuple):
+                    self.click_pos(*position)
+                else:
+                    self._click(position)
+                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]检测到停止点{stop_name[:-4]}停止运行')
+                loop = False
+                self.stopOut.emit(False)
+
+            # check whether skip img exist
+            skip_flag = self._check_skip_img()
+            if skip_flag != -1:  # find skip images
+                skip_name, position = self.skip_img_list[skip_flag]
+                if isinstance(position, tuple):
+                    self.click_pos(*position)
+                else:
+                    self._click(position)
+                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]跳过{skip_name[:-4]}')
+
+            # then the main clicking function:
+            if not self._img_exist(img_name):
+                if found == 0:   # not found yet
+                    time.sleep(frequency)
+                    self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到，等待{frequency}秒')
+                    continue
+                else:  # img found before, and disappear after click -> to next step
+                    self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}点击成功')
+                    loop = False
+            else:
+                found += 1
+                self._click(img_name)
+                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]第{found}次点击', mode='last')
+
+
+    def click_pos(self, x, y, sleep_time=0):
+        # this can operate directly
+        pag.moveTo(helper.relative2abslute(x, y))
+        pag.click()
+        self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]点击相对位置({x}，{y})')
+
+    def click_if_exist(self, img_name):
+        if self._img_exist(img_name):
+            self.click(img_name)
+
+    def _img_exist(self, img_name, confidence=0.9):
+        img_list = img_name.split(' | ')
+        for img in img_list:
+            absLocation = pag.locateOnScreen(self.current_dir + 'img/' + img,
+                                             region=(self.simulator['Left'], self.simulator['Top'],
+                                                     self.simulator['Width'], self.simulator['Height']),
+                                             confidence=confidence)
+            if absLocation is not None:
+                return True
+
+        return False
+
     def _getImgAbsPos(self, img_name, confidence=0.90):
         img_list = img_name.split(' | ')
         click_pos = None
@@ -383,88 +468,26 @@ class Runner(QThread):
 
         return click_pos
 
-    def click(self, img_name, frequency=2):
-        # check whether exist, not -> wait until exist
-        # if exist, click, mark as found.
-        # check if exist, still exist -> reclick, not exist -> next click command
-        loop = True
-        found = False
-        wait_count = 0
-        click_count = 0
-        self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]寻找图片{img_name.replace(" | ", "或")}',
-                    mode='last')
-        while loop:
-            self._check_stop_img()
-            self._check_skip_img()
-            abspos = self._getImgAbsPos(img_name)
-            if abspos is None and not found:
-                # check whether exist, not -> keep checking until exist
-                if wait_count == 0:
-                    self.printf(
-                        f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到，等待{frequency}秒')
-                else:
-                    self.printf(
-                        f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到({wait_count}次)，等待{frequency}秒',
-                        mode='last')
-                wait_count += 1
-                time.sleep(frequency)
-                continue
-
-            if abspos is not None and not found:
-                # the first time to find a position
-                found = True
-                self.printf(
-                    f'{datetime.now().strftime("%H:%M:%S")}[行动]图片{img_name}位置{abspos}')
-                pag.moveTo(*abspos, duration=0.5)
-                continue
-
-            if abspos is not None and found:
-                # still find the image after clicking -> click fail -> reclick
-                if click_count == 0:
-                    self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]尝试点击')
-                else:
-                    self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]点击失败({click_count}次)，重试')
-                click_count += 1
-                pag.click()
-                time.sleep(1.5)
-                continue
-
-            if abspos is None and found:
-                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}点击成功')
-                loop = False
-
-    def click_pos(self, x, y, sleep_time=0):
-        # this can operate directly
-        pag.click(helper.relative2abslute(x, y))
-
-    def img_exist(self, img_name):
-        abspos = self._getImgAbsPos(img_name)
-        if abspos is not None:
-            return True
-        else:
-            return False
-
-    def set_skip_img(self, img_name):
-        self.skip_img_list = img_name.split(' | ')
-
-    def set_stop_img(self, img_name):
-        self.stop_img_list = img_name.split(' | ')
-
     def _check_skip_img(self):
-        for skip in self.skip_img_list:
-            if self.img_exist(skip):
-                self.click_pos(0.5, 0.5)
-                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]跳过{skip}')
+        for i, skip in enumerate(self.skip_img_list):
+            img_name, position = skip
+            if self._img_exist(img_name):
+                return i
+        return -1
 
     def _check_stop_img(self):
-        for stop in self.stop_img_list:
-            if self.img_exist(stop):
-                # do something here
-                helper.loopTime.setValue(0)
-                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]检测到停止点{stop}停止运行')
-                self.terminate()
-                self.wait()
-                
+        for i, stop in enumerate(self.stop_img_list):
+            img_name, position = stop
+            if self._img_exist(img_name):
+                return i
+        return -1
+
+    def _click(self, img_name):
+        abspos = self._getImgAbsPos(img_name)
+        if abspos is not None:
+            pag.moveTo(*abspos, duration=0.3)
+            pag.click()
+
     def printf(self, text, mode='append'):
         self.logOut.emit(text, mode)
 
@@ -504,6 +527,7 @@ class UncaughtHook(QObject):
         if QApplication.instance() is not None:
             errorbox = QMessageBox()
             errorbox.setText("啊偶，脑机接口链接失败了:\n{0}".format(log_msg))
+            print(log_msg)
             errorbox.setWindowFlags(Qt.WindowStaysOnTopHint)
             errorbox.exec_()
             sys.exit()
