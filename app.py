@@ -260,7 +260,7 @@ class Helper(QWidget):
     @staticmethod
     def list2html(ls):
         html = '<p>'
-        for line in ls:
+        for line in ls[-3:]:
             line = line.replace('[', '<font color="red">[')
             line = line.replace(']', ']</font>')
             html += f"{line}<br />"
@@ -382,6 +382,7 @@ class Runner(QThread):
     def click(self, img_name, frequency=2):
         loop = True
         found = 0
+        not_found = 0
         while loop:
             # check whether stop img exist
             stop_flag = self._check_stop_img()
@@ -409,15 +410,26 @@ class Runner(QThread):
             if not self._img_exist(img_name):
                 if found == 0:   # not found yet
                     time.sleep(frequency)
-                    self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到，等待{frequency}秒')
+                    if not_found == 0:
+                        self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到{not_found}次，等待{frequency}秒')
+                    else:
+                        self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}未找到{not_found}次，等待{frequency}秒', mode='last')
+                    not_found += 1
                     continue
                 else:  # img found before, and disappear after click -> to next step
                     self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}点击成功')
                     loop = False
             else:
                 found += 1
-                self._click(img_name)
-                self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]第{found}次点击', mode='last')
+                if self._img_exist(img_name):  # ensure exist
+                    self._click(img_name)
+                    if found == 1:
+                        self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]{img_name}=>第{found}次点击', mode='append')
+                    else:
+                        self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]{img_name}=>第{found}次点击', mode='last')
+                else:   # found in previous, but not found now -> has been misclicked, break this loop and continue
+                    self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]图片{img_name}似乎已被点击，跳到下一个按钮')
+                    loop = False
 
 
     def click_pos(self, x, y, sleep_time=0):
