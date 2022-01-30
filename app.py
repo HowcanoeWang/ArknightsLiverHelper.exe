@@ -4,6 +4,7 @@ import sys
 import time
 import traceback
 import pyautogui as pag
+import cv2
 from datetime import datetime
 from random import randrange
 from PyQt5.QtWidgets import *
@@ -23,11 +24,11 @@ class Helper(QWidget):
         super().__init__(parent)
         self.screen_ref = min(screen_height, screen_width)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint)
-        self.resize(1600+2, 900+145)
         self.setContentsMargins(0, 0, 0, 0)
         self.setWindowTitle(self.title)
         self.setWindowIcon(QIcon('icon/images.jpg'))
         self.setMouseTracking(True)
+        self.resize(1600+2, 900+145)
 
         self.mouseTimer = QTimer(self)
         self.mouseTimer.start(200)
@@ -117,7 +118,7 @@ class Helper(QWidget):
         # Time Input
         self.loopTimeLayout = QVBoxLayout()
         self.loopTime = QSpinBox()
-        self.loopTime.setRange(0, 30)
+        self.loopTime.setRange(0, 3000)
         self.loopTime.setValue(0)
         self.loopTime.setFixedHeight(int(self.screen_ref * 0.03))
 
@@ -171,7 +172,7 @@ class Helper(QWidget):
         tool_height = toolRect.height()
 
         trans_height = frame_height-title_height-tool_height
-        trans_width = frame_width-2
+        trans_width = frame_width - 2
 
         region = QRegion(QRect(0, 0, frameRect.right(), frameRect.bottom()))
         # "subtract" the grabWidget rectangle to get a mask that only contains
@@ -184,6 +185,9 @@ class Helper(QWidget):
 
         self.simulator['Height'] = trans_height
         self.simulator['Width'] = trans_width
+        # 长宽取50的倍数
+        self.simulator['HeightSim'] = int(round(trans_height / 50) * 50)
+        self.simulator['WidthSim'] = int(round(trans_width / 50) * 50)
         self.simulator['Left'] = frameRect.left() + 1
         self.simulator['Top'] = frameRect.top() + title_height
 
@@ -339,6 +343,7 @@ class Runner(QThread):
         super().__init__(parent)
         self.run_code = ''
         self.current_dir = ''
+        self.cache_path = ''
         self.simulator = {}
         self.skip_img_list = []
         self.stop_img_list = []
@@ -350,6 +355,7 @@ class Runner(QThread):
         script = ''
         with open(self.current_dir + 'run.ash') as f:
             for row in f.readlines():
+                row = row.replace('template_screen_size(', 'self.template_screen_size(')
                 row = row.replace('click(', 'self.click(')
                 row = row.replace('set_skip_img(', 'self.set_skip_img(')
                 row = row.replace('set_stop_img(', 'self.set_stop_img(')
@@ -365,6 +371,36 @@ class Runner(QThread):
         self.stop_img_list = []
         exec(self.run_code)
         self.sigOut.emit(True)
+
+    ########################
+    #  Script image resize #
+    ########################
+    def template_screen_size(self, template_width, template_height):
+        # devide the size of unit 50 pixels
+        screen_w = self.simulator['WidthSim']
+        screen_h = self.simulator['HeightSim']
+
+        w_ratio =  screen_w / template_width
+        h_ratio = screen_h / template_height
+
+        print(w_ratio, h_ratio)
+
+        # create cache path if not exists
+        self.cache_path = os.path.join(self.current_dir, ".cache", f"{screen_w}x{screen_h}")
+        if not os.path.exists(self.cache_path):
+            os.makedirs(self.cache_path)
+
+            # resize all images
+            img_folder = os.path.join(self.current_dir, "img")
+            for img_name in os.listdir(img_folder):
+                img = cv2.imread(os.path.join(img_folder, img_name))
+                # cv2 size = (width, height)
+                resized = cv2.resize(img, None, fx=w_ratio, fy=h_ratio, interpolation=cv2.INTER_AREA)
+                cv2.imwrite(os.path.join(self.cache_path, img_name), resized)
+            self.printf(f"成功适配当前屏幕大小{screen_w}x{screen_h}")
+        else:
+            self.printf(f"使用已缓存的{screen_w}x{screen_h}图片")
+
 
     #####################
     #  Mouse Controller #
@@ -438,17 +474,21 @@ class Runner(QThread):
         pag.click()
         self.printf(f'{datetime.now().strftime("%H:%M:%S")}[信息]点击相对位置({x}，{y})')
 
-    def click_if_exist(self, img_name):
+    def click_if_exist(self, img_name, frequency=2):
         if self._img_exist(img_name):
-            self.click(img_name)
+            self.click(img_name, frequency)
 
     def _img_exist(self, img_name, confidence=0.9):
         img_list = img_name.split(' | ')
         for img in img_list:
-            absLocation = pag.locateOnScreen(self.current_dir + 'img/' + img,
-                                             region=(self.simulator['Left'], self.simulator['Top'],
-                                                     self.simulator['Width'], self.simulator['Height']),
-                                             confidence=confidence)
+            try:
+                absLocation = pag.locateOnScreen(os.path.join(self.cache_path, img),
+                                                region=(self.simulator['Left'], self.simulator['Top'],
+                                                        self.simulator['Width'], self.simulator['Height']),
+                                                confidence=confidence)
+            except ValueError:
+                absLocation = None
+                QMessageBox.about(self, '警告', f'当前窗口大小比[{img}]要小，请设置正确的分辨率！')
             if absLocation is not None:
                 return True
 
@@ -459,13 +499,13 @@ class Runner(QThread):
         click_pos = None
         for img in img_list:
             try:
-                absLocation = pag.locateOnScreen(self.current_dir + 'img/' + img,
+                absLocation = pag.locateOnScreen(os.path.join(self.cache_path, img),
                                                  region=(self.simulator['Left'], self.simulator['Top'],
                                                          self.simulator['Width'], self.simulator['Height']),
                                                  confidence=confidence)
             except ValueError:
                 absLocation = None
-                QMessageBox.about(self, '警告', '当前窗口大小比img中图片要小，请设置正确的分辨率！')
+                QMessageBox.about(self, '警告', f'当前窗口大小比[{img}]要小，请设置正确的分辨率！')
 
             if absLocation is not None:
                 w = absLocation.width

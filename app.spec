@@ -4,7 +4,7 @@ block_cipher = None
 
 
 a = Analysis(['app.py'],
-             pathex=['C:\\OneDrive\\Program\\GitHub\\ArknightsLiverHelper.exe'],
+             pathex=['D:\\OneDrive\\Program\\GitHub\\ArknightsLiverHelper.exe'],
              binaries=[],
              datas=[],
              hiddenimports=[],

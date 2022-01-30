@@ -2,7 +2,10 @@ test/*
 .idea/*
 Scripts/repeat.ark/test/*
 Scripts/test.ark/*
+Scripts/wechat.ark/*
 build/*
 dist/*
 distribute/*
 __pycache__/*
+.cache
+run*.bat

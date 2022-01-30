@@ -1,6 +1,5 @@
+template_screen_size(1600, 900)
 set_skip_img('get_item.png', 'get_item.png')
-
-    
 click('load.png')
 click('close_info_panel.png')
 click('close_info_panel.png')
