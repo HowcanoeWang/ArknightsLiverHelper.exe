@@ -14,9 +14,10 @@ from PyQt5.QtCore import *
 class Helper(QWidget):
     dirty = True
     drag = False
-    title = '明日方舟护肝助手V0.1'
+    title = 'PRTS护肝助手 '
     simulator = {'Left': 0, 'Top': 0, 'Width': 1280, 'Height': 720}
     script_list = []
+    keymap_list = []
     run_times = 0
     logs = ['']
 
@@ -26,9 +27,9 @@ class Helper(QWidget):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint)
         self.setContentsMargins(0, 0, 0, 0)
         self.setWindowTitle(self.title)
-        self.setWindowIcon(QIcon('icon/images.jpg'))
+        self.setWindowIcon(QIcon('icon/PRTS.png'))
         self.setMouseTracking(True)
-        self.resize(1600+2, 900+145)
+        self.resize(1060+2, 630+145)
 
         self.mouseTimer = QTimer(self)
         self.mouseTimer.start(200)
@@ -38,35 +39,39 @@ class Helper(QWidget):
         self.functionConnector()
 
         self.loadScriptList()
+        self.loadkeymapList()
 
     ##############
     # GUI Design #
     ##############
     def setupUI(self):
-        self.mainlayout = QVBoxLayout(self)
-        self.setLayout(self.mainlayout)
+        self.mainlayout = QVBoxLayout()
         self.mainlayout.setContentsMargins(0, 0, 0, 0)
         self.mainlayout.setSpacing(0)
 
-        # ======= remake window title========
-        self.winTitle = QHBoxLayout(self)
+        self.setLayout(self.mainlayout)
 
-        self.iconLabel = QLabel(self)
-        self.titleLabel = QLabel(self)
-        self.minButton = QPushButton(self)
-        self.closeButton = QPushButton(self)
+        # ======= remake window title========
+        self.winTitle = QHBoxLayout()
+
+        self.iconLabel = QLabel()
+        self.titleLabel = QLabel()
+        self.minButton = QPushButton()
+        self.closeButton = QPushButton()
 
         self.iconLabel.setAlignment(Qt.AlignLeft)
         self.titleLabel.setAlignment(Qt.AlignCenter)
 
-        self.iconLabel.setPixmap(QPixmap("icon/images.jpg").scaled(self.screen_ref*0.03, self.screen_ref*0.03))
+        icon_size = int(self.screen_ref * 0.03)
+
+        self.iconLabel.setPixmap(QPixmap("icon/PRTS.png").scaled(icon_size, icon_size))
         self.titleLabel.setText(self.title)
         self.titleLabel.setFont(QFont('Microsoft YaHei UI', 15))
         self.minButton.setIcon(QIcon("icon/minimize.png"))
-        self.minButton.setIconSize(QSize(self.screen_ref*0.03, self.screen_ref*0.03))
+        self.minButton.setIconSize(QSize(icon_size, icon_size))
         self.minButton.setStyleSheet("QPushButton{border:none};")
         self.closeButton.setIcon(QIcon("icon/cancel.png"))
-        self.closeButton.setIconSize(QSize(self.screen_ref * 0.03, self.screen_ref * 0.03))
+        self.closeButton.setIconSize(QSize(icon_size, icon_size))
         self.closeButton.setStyleSheet("QPushButton{border:none};")
 
         # screen info on wintitle
@@ -104,6 +109,17 @@ class Helper(QWidget):
         # ======== set bottom tools ===========
         self.toolLayout = QHBoxLayout()
 
+        # Keymap Choice
+        self.keymapChoiceLayout = QVBoxLayout()
+        self.keymapChoice = QComboBox()
+        self.keymapChoice.setFixedHeight(int(self.screen_ref*0.02))
+
+        self.keymapChoiceLayout.addWidget(QLabel('选择按键布局：'))
+        self.keymapChoiceLayout.addWidget(self.keymapChoice)
+
+        self.toolLayout.addLayout(self.keymapChoiceLayout)
+        self.toolLayout.addWidget(VLine())
+
         # Script Choice
         self.scriptChoiceLayout = QVBoxLayout()
         self.scriptChoice = QComboBox()
@@ -134,8 +150,8 @@ class Helper(QWidget):
         self.toolLayout.addWidget(self.startButton)
 
         self.logText = QTextEdit()
-        self.logText.setFixedHeight(self.screen_ref*0.05)
-        self.logText.setFixedWidth(self.screen_ref*0.4)
+        self.logText.setFixedHeight(int(self.screen_ref*0.05))
+        self.logText.setMinimumWidth(int(self.screen_ref*0.25))
 
         self.toolLayout.addWidget(self.logText)
         self.toolLayout.addStretch()
@@ -151,17 +167,24 @@ class Helper(QWidget):
         self.closeButton.clicked.connect(self.closeWindow)
         self.mouseTimer.timeout.connect(self.updateMouseRelativePos)
         self.scriptChoice.currentIndexChanged.connect(self.scriptChanges)
+        self.keymapChoice.currentIndexChanged.connect(self.keymapChanges)
         self.startButton.clicked.connect(self.runScript)
         self.runner.sigOut.connect(self.finish_once)
         self.runner.logOut.connect(self.printf)
         self.runner.stopOut.connect(self.stopScript)
 
+    ####################
+    # Minimize & close #
+    ####################
     def showMininizedWindow(self):
         self.setWindowState(Qt.WindowMinimized)
 
     def closeWindow(self):
         sys.exit()
 
+    ##################
+    # Resize windows #
+    ##################
     def updateMask(self):
         frameRect = self.frameGeometry()
         frame_width = frameRect.width()
@@ -237,8 +260,8 @@ class Helper(QWidget):
         self.mouseRefPos.setText(f"({format(rel_x, '.3f')}, {format(rel_y, '.3f')})")
 
     def abslute2relative(self, x, y):
-        rel_x = (x - self.simulator['Left']) / self.simulator['Width']
-        rel_y = (y - self.simulator['Top']) / self.simulator['Height']
+        rel_x = (x - self.simulator['Left']) / max(1, self.simulator['Width'])
+        rel_y = (y - self.simulator['Top']) / max(1, self.simulator['Height'])
         return rel_x, rel_y
 
     def relative2abslute(self, rel_x, rel_y):
@@ -246,6 +269,10 @@ class Helper(QWidget):
         y = rel_y * self.simulator['Height'] + self.simulator['Top']
         return x, y
 
+
+    ################
+    # Log function #
+    ################
     def printf(self, text, mode='append'):
         # mode == clear: empty all
         # mode == last: replace the last line
@@ -256,6 +283,7 @@ class Helper(QWidget):
             self.logs[-1] = text
         elif mode == 'append':
             self.logs.append(text)
+        print(text)
 
         self.logText.setHtml(self.list2html(self.logs))
         vsb = self.logText.verticalScrollBar()
@@ -264,16 +292,16 @@ class Helper(QWidget):
     @staticmethod
     def list2html(ls):
         html = '<p>'
-        for line in ls[-3:]:
+        for line in ls[-6:]:   # only keep 6 lines
             line = line.replace('[', '<font color="red">[')
             line = line.replace(']', ']</font>')
             html += f"{line}<br />"
         html = html[:-6] + '</p>'
         return html
 
-    ##################
-    #  Script Loader #
-    ##################
+    #################
+    # Script Loader #
+    #################
     def loadScriptList(self):
         if not os.path.exists('Scripts/'):
             os.mkdir('Scripts')
@@ -287,7 +315,7 @@ class Helper(QWidget):
             self.scriptChoice.addItems(self.script_list)
             self.startButton.setEnabled(True)
         else:
-            QMessageBox.about(self, '警告', '未发现脚本，请将脚本文件复制到创建的Scripts文件夹内')
+            QMessageBox.about(self, '警告', '未发现脚本，请将脚本文件复制到创建的Scripts文件夹内并重启应用')
             self.startButton.setEnabled(False)
 
     def scriptChanges(self):
@@ -320,11 +348,36 @@ class Helper(QWidget):
         self.run_times -= 1
         self.printf(f'{datetime.now().strftime("%H:%M:%S")}[行动] ==========剩余{self.run_times}次==========')
         self.loopTime.setValue(self.run_times)
+        print("[debug] self.loopTime.setValue done")
         if self.run_times > 0:
+            print("[debug] if self.run_times > 0 done")
             self.runner.start()
+            print("[debug] self.runner.start() done")
         else:
             self.printf(f'[信息]=========== {self.script_name} 执行完毕============')
             self.startButton.setText('开始')
+
+    #################
+    # keymap Loader #
+    #################
+    def loadkeymapList(self):
+        if not os.path.exists('Scripts/'):
+            os.mkdir('Scripts')
+        files = os.listdir('Scripts/')
+        for f in files:
+            if '.keymap' in f:
+                if 'keymap.json' in os.listdir(f'Scripts/{f}/'):
+                    self.keymap_list.append(f[:-7])
+
+        if len(self.keymap_list) > 0:
+            self.keymapChoice.addItems(self.keymap_list)
+            # self.startButton.setEnabled(True)
+        else:
+            QMessageBox.about(self, '信息', '未发现键盘布局，如有需要请将键盘布局文件复制到创建的Scripts文件夹内并重启应用')
+            # self.startButton.setEnabled(False)
+
+    def keymapChanges(self):
+        self.printf(f'=========载入键盘布局{self.keymapChoice.currentText()}=======', 'clear')
 
 
 class VLine(QFrame):
@@ -347,6 +400,8 @@ class Runner(QThread):
         self.simulator = {}
         self.skip_img_list = []
         self.stop_img_list = []
+        self.confidence = 0.9
+        self.first_run = True
 
     def set_params(self, current_dir, simulator):
         self.current_dir = current_dir
@@ -376,6 +431,11 @@ class Runner(QThread):
     #  Script image resize #
     ########################
     def template_screen_size(self, template_width, template_height):
+        if self.first_run:
+            self.first_run = False
+        else:
+            return 0
+
         # devide the size of unit 50 pixels
         screen_w = self.simulator['WidthSim']
         screen_h = self.simulator['HeightSim']
@@ -383,7 +443,9 @@ class Runner(QThread):
         w_ratio =  screen_w / template_width
         h_ratio = screen_h / template_height
 
-        print(w_ratio, h_ratio)
+        ratio = min(w_ratio, h_ratio)
+
+        self.confidence = min(0.4 +  0.5 * ratio, self.confidence)
 
         # create cache path if not exists
         self.cache_path = os.path.join(self.current_dir, ".cache", f"{screen_w}x{screen_h}")
@@ -393,14 +455,27 @@ class Runner(QThread):
             # resize all images
             img_folder = os.path.join(self.current_dir, "img")
             for img_name in os.listdir(img_folder):
-                img = cv2.imread(os.path.join(img_folder, img_name))
-                # cv2 size = (width, height)
-                resized = cv2.resize(img, None, fx=w_ratio, fy=h_ratio, interpolation=cv2.INTER_AREA)
-                cv2.imwrite(os.path.join(self.cache_path, img_name), resized)
-            self.printf(f"成功适配当前屏幕大小{screen_w}x{screen_h}")
+                self._resize_images(input_img_path=os.path.join(img_folder, img_name),
+                                    output_img_path=os.path.join(self.cache_path, img_name),
+                                    ratio=ratio)
+            self.printf(f"成功适配当前屏幕大小{screen_w}x{screen_h}, 压缩率{round(ratio, 2)},使用置信度{round(self.confidence,2)}")
         else:
-            self.printf(f"使用已缓存的{screen_w}x{screen_h}图片")
+            current_list = os.listdir(self.cache_path)
+            img_folder = os.path.join(self.current_dir, "img")
+            for img_name in os.listdir(img_folder):
+                # check if image not exists
+                if not img_name in current_list:
+                    self._resize_images(input_img_path=os.path.join(img_folder, img_name),
+                                        output_img_path=os.path.join(self.cache_path, img_name),
+                                        ratio=ratio)
 
+            self.printf(f"使用已缓存的{screen_w}x{screen_h}图片, 压缩率{round(ratio, 2)}，使用置信度{round(self.confidence, 2)}")
+
+    def _resize_images(self, input_img_path, output_img_path, ratio, interpolation=cv2.INTER_AREA):
+        img = cv2.imread(input_img_path)
+        # cv2 size = (width, height)
+        resized = cv2.resize(img, None, fx=ratio, fy=ratio, interpolation=cv2.INTER_AREA)
+        cv2.imwrite(output_img_path, resized)
 
     #####################
     #  Mouse Controller #
@@ -478,8 +553,10 @@ class Runner(QThread):
         if self._img_exist(img_name):
             self.click(img_name, frequency)
 
-    def _img_exist(self, img_name, confidence=0.9):
+    def _img_exist(self, img_name, confidence=None):
         img_list = img_name.split(' | ')
+        if confidence is None:
+            confidence = self.confidence
         for img in img_list:
             try:
                 absLocation = pag.locateOnScreen(os.path.join(self.cache_path, img),
@@ -494,9 +571,11 @@ class Runner(QThread):
 
         return False
 
-    def _getImgAbsPos(self, img_name, confidence=0.90):
+    def _getImgAbsPos(self, img_name, confidence=None):
         img_list = img_name.split(' | ')
         click_pos = None
+        if confidence is None:
+            confidence = self.confidence
         for img in img_list:
             try:
                 absLocation = pag.locateOnScreen(os.path.join(self.cache_path, img),
