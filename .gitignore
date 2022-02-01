@@ -9,3 +9,4 @@ distribute/*
 __pycache__/*
 .cache
 run*.bat
+ArkHelper.lnk

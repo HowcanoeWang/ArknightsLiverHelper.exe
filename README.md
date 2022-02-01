@@ -1,9 +1,16 @@
-﻿# AkrnightsSimulatorHelper.exe
+﻿# ArknightsSimulatorHelper.exe
 Arknights Simulator Helper | 基于python鼠标控制的明日方舟模拟器护肝助手
 
 ![](img/md_gui.png)
 
 **当然也可以用来刷别的东西，他就是个按键精灵**
+
+如果你想实现后台控制(使用ADB接口)而不是前台控制鼠标，并且想使用更多自动化功能，请参考这些项目：
+
+* [Arknights Auto Helper](https://github.com/ninthDevilHAUNSTER/ArknightsAutoHelper)
+* [arknights-mower](https://github.com/Konano/arknights-mower)
+* [总结列表-明日方舟速通](https://github.com/tkkcc/arknights#%E5%AF%B9%E6%AF%94)
+
 
 ## 1. 特性
 

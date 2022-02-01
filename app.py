@@ -2,11 +2,13 @@
 import os
 import sys
 import time
+import json
 import traceback
 import pyautogui as pag
 import cv2
 from datetime import datetime
 from random import randrange
+import keyboard
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
@@ -366,7 +368,7 @@ class Helper(QWidget):
         files = os.listdir('Scripts/')
         for f in files:
             if '.keymap' in f:
-                if 'keymap.json' in os.listdir(f'Scripts/{f}/'):
+                if 'main.json' in os.listdir(f'Scripts/{f}/'):
                     self.keymap_list.append(f[:-7])
 
         if len(self.keymap_list) > 0:
@@ -378,7 +380,21 @@ class Helper(QWidget):
 
     def keymapChanges(self):
         self.printf(f'=========载入键盘布局{self.keymapChoice.currentText()}=======', 'clear')
+        self.keymap_name = self.keymapChoice.currentText()
+        self.keymap_script = f'Scripts/{self.keymap_name}.keymap/main.json'
+        with open(self.keymap_script) as json_file:
+            keymap_json = json.load(json_file)
 
+            keymap_scripts = ""
+            for k, pos in keymap_json.items():
+                keymap_scripts += f"keyboard.add_hotkey('{k}', self._click_and_return, args={pos})\n"
+
+            exec(keymap_scripts)
+
+    def _click_and_return(self, x, y):
+        (prev_x, prev_y) = pag.position()
+        pag.click(self.relative2abslute(x, y))
+        pag.moveTo(prev_x, prev_y)
 
 class VLine(QFrame):
     # a simple VLine, like the one you get from designer
