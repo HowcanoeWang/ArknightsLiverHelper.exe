@@ -12,6 +12,7 @@ import keyboard
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
+import win32gui
 
 class Helper(QWidget):
     dirty = True
@@ -381,20 +382,35 @@ class Helper(QWidget):
     def keymapChanges(self):
         self.printf(f'=========载入键盘布局{self.keymapChoice.currentText()}=======', 'clear')
         self.keymap_name = self.keymapChoice.currentText()
-        self.keymap_script = f'Scripts/{self.keymap_name}.keymap/main.json'
-        with open(self.keymap_script) as json_file:
-            keymap_json = json.load(json_file)
+        keymap_script = f'Scripts/{self.keymap_name}.keymap/main.json'
+        with open(keymap_script, encoding='utf-8') as json_file:
+            self.keymap_json = json.load(json_file)
 
             keymap_scripts = ""
-            for k, pos in keymap_json.items():
+            for k, pos in self.keymap_json['keymap'].items():
                 keymap_scripts += f"keyboard.add_hotkey('{k}', self._click_and_return, args={pos})\n"
 
             exec(keymap_scripts)
 
     def _click_and_return(self, x, y):
-        (prev_x, prev_y) = pag.position()
-        pag.click(self.relative2abslute(x, y))
-        pag.moveTo(prev_x, prev_y)
+        if self.get_current_window_name() in self.keymap_json['window_name']:
+            (prev_x, prev_y) = pag.position()
+            pag.click(self.relative2abslute(x, y))
+            pag.moveTo(prev_x, prev_y)
+        else:
+            pass
+
+
+    #############################
+    # Get current focus windows #
+    #############################
+    @staticmethod
+    def get_current_window_name():
+        window = win32gui.GetForegroundWindow()
+        active_window_name = win32gui.GetWindowText(window)
+
+        return active_window_name
+
 
 class VLine(QFrame):
     # a simple VLine, like the one you get from designer
