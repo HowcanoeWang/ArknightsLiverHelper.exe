@@ -12,7 +12,9 @@ import keyboard
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
-import win32gui
+
+if sys.platform.startswith("win"):
+    import win32gui
 
 class Helper(QWidget):
     dirty = True
@@ -406,10 +408,13 @@ class Helper(QWidget):
     #############################
     @staticmethod
     def get_current_window_name():
-        window = win32gui.GetForegroundWindow()
-        active_window_name = win32gui.GetWindowText(window)
+        if sys.platform.startswith("win"):
+            window = win32gui.GetForegroundWindow()
+            active_window_name = win32gui.GetWindowText(window)
 
-        return active_window_name
+            return active_window_name
+        else:
+            return "明日方舟"
 
 
 class VLine(QFrame):
